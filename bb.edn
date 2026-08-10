@@ -1,0 +1,10 @@
+{:paths ["src" "test"]
+ :tasks
+ {orgstar {:doc  "orgstar CLI: keywords, headings, select"
+           :requires ([orgstar.cli :as cli])
+           :task (apply cli/-main *command-line-args*)}
+
+  test {:doc  "Run the tests (needs an Emacs server with cljbang-org)"
+        :requires ([clojure.test :as t] [orgstar.core-test])
+        :task (let [{:keys [fail error]} (t/run-tests 'orgstar.core-test)]
+                (System/exit (if (pos? (+ fail error)) 1 0)))}}}

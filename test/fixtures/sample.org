@@ -1,0 +1,20 @@
+#+TITLE: Test server
+#+FILETAGS: :infra:
+#+TARGET: .. (project)
+#+TARGET: /ssh:app@example: (server)
+
+* TODO Quadlets
+:PROPERTIES:
+:CUSTOM_ID: quadlets
+:END:
+
+Rootless containers, one unit each.
+
+#+name: not-a-keyword
+#+caption: nor is this
+#+begin_src sh
+echo hi
+#+end_src
+
+* DONE Networking
+** TODO Firewall
