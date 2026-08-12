@@ -1,0 +1,41 @@
+#!/usr/bin/env bb
+
+(require
+ '[babashka.deps :as deps]
+ '[babashka.cli :as cli]
+ '[orgstar.core :as org]
+ '[cheshire.core :as json]
+ '[clojure.pprint :as pp])
+
+(deps/add-deps '{:deps {kpassapk/orgstar {:git/url "https://github.com/kpassapk/orgstar"
+                                          :git/sha "4b6790f60573c9ab5c05d5641bc12e8fc00f1663"}}})
+
+(defn- emit [{:keys [json]} value]
+  (if json
+    (println (json/generate-string value {:pretty true}))
+    (pp/pprint value)))
+
+(defn keywords [opts]
+  (org/keywords opts))
+
+(defn headings [{:as opts :keys [file]}]
+  (println "Options:" opts)
+  (emit opts (org/headings file)))
+
+(def tree
+  {:cmd
+   {"keywords"
+    {:desc "Get a file's #+KEYWORD: lines"
+     :exec-fn keywords
+     :args->opts [:file]}
+    "headings"
+    {:desc "Get every heading as data"
+     :exec-fn headings
+     :args->opts [:file]}
+    "select"
+    {:desc "headings matching an org-ql sexp"}}})
+
+(defn -main [& args]
+  (cli/dispatch tree args {:prog "orgstar" :help true}))
+
+(apply -main *command-line-args*)
