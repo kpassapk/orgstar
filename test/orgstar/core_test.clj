@@ -2,28 +2,23 @@
   "Tests against a real Emacs, because a real Emacs is the backend.
 
   The reads run on test/fixtures/sample.org.  The writes run on a copy
-  in a temp directory, and kill the buffer afterwards so a test leaves
-  nothing open in the Emacs the user is sitting in."
+  in a temp directory, and read it back through `revert!': the Emacs
+  behind the pod holds the buffer the writes edited, so reading a
+  written file without reverting would be reading the writes rather than
+  the file."
   (:require
    [babashka.fs :as fs]
-   [babashka.process :as p]
    [clojure.test :refer [deftest is testing use-fixtures]]
    [orgstar.core :as org]
    [orgstar.emacs :as emacs]))
 
 (def sample (str (fs/absolutize "test/fixtures/sample.org")))
 
-(defn- kill-buffer! [file]
-  (p/shell {:out :string :err :string :continue true}
-           "emacsclient" "--eval"
-           (str "(let ((b (get-file-buffer " (pr-str (str file)) "))) "
-                "  (when b (with-current-buffer b (set-buffer-modified-p nil)) (kill-buffer b)) t)")))
-
 (use-fixtures :once
   (fn [f]
     (if (emacs/available?)
       (f)
-      (println "SKIP: no Emacs server with cljbang-org; start one and re-run."))))
+      (println "SKIP: the pod's Emacs did not start; see the message above."))))
 
 (deftest keywords-test
   (when (emacs/available?)
@@ -71,13 +66,12 @@
                             [:set-keyword! file :filetags ":infra:archive:"]
                             [:save! file]]))))
         (testing "the edits are on disk and read back through the same API"
-          (kill-buffer! file)
+          (org/revert! file)
           (is (= ":infra:archive:" (:filetags (org/keywords file))))
           (is (= "DONE" (:todo (first (org/select file '(level 1)))))))
         (testing "a keyword set to a vector writes one line each"
           (org/run! [[:set-keyword! file :target ["a" "b" "c"]] [:save! file]])
-          (kill-buffer! file)
+          (org/revert! file)
           (is (= ["a" "b" "c"] (:target (org/keywords file)))))
         (finally
-          (kill-buffer! file)
           (fs/delete-tree dir))))))

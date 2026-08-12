@@ -2,9 +2,9 @@
   "The Emacs backend: org read and written by Emacs itself.
 
   Nothing here parses org.  An op is translated to a cljbang form, the
-  forms of one call go over to a running Emacs as a single program, and
-  what comes back is org-mode's own answer -- org-element for the
-  reading, `org-todo' and friends for the writing.
+  forms of one call go over to Emacs as a single program, and what comes
+  back is org-mode's own answer -- org-element for the reading,
+  `org-todo' and friends for the writing.
 
   The translation is the whole backend, and it is deliberately the only
   place that knows cljbang-org exists: `orgstar.core' speaks ops, a
@@ -13,54 +13,73 @@
   are the one case in v0 -- the difference is repaired here, on the way
   out.
 
-  Transport is `emacsclient', so the Emacs is the one the user is
-  sitting in: an edit lands in the buffer they have open, and
-  `:save!' is what puts it on disk.  A batch Emacs behind the pod
-  (pod-kpassapk-emacs) is the other transport worth having and is not
-  written yet."
+  Transport is pod-kpassapk-emacs, a babashka pod driving a batch Emacs
+  of its own.  There is no server to start and no init file to read: the
+  elisp the backend needs is installed into that Emacs on first use, so
+  what a caller has to have is an `emacs' binary.  The Emacs belongs to
+  the process, which is what makes `:save!' worth its own op and worth
+  going in the same `run' as the edits it persists -- a buffer left
+  modified is gone when the process exits."
   (:require
-   [babashka.fs :as fs]
-   [babashka.process :as p]
-   [clojure.edn :as edn]
+   [babashka.pods :as pods]
    [clojure.string :as str]))
-
-(def ^:dynamic *socket*
-  "The Emacs server socket to talk to, or nil for emacsclient's default."
-  nil)
 
 ;;; Transport
 
-(defn- emacsclient
-  "Run CODE, a string of cljbang Clojure, in the Emacs server.
+(def ^:private pod-coords
+  "The released pod to load, unless $ORGSTAR_POD names a binary."
+  ['kpassapk/emacs "0.4.0"])
 
-  cljbang reads a file rather than a string, so the program goes through
-  a temp file; the value comes back as whatever the program printed with
-  `pr-str', which emacsclient prints again as an elisp string -- hence
-  the two reads."
+(def ^:private packages
+  "The elisp the ops need, as `use-package' declarations, in load order.
+
+  cljbang itself is not here: the pod vendors it, being what compiles
+  the Clojure it is sent.  org-ql is a package of its own and only
+  `:select' wants it, but it is installed with the rest rather than on
+  first use, so that the cost of a backend is paid in one place."
+  ['(cljbang-org :vc (:url "https://github.com/kpassapk/cljbang-org"))
+   '(org-ql :ensure t)
+   '(cljbang-org-ql :after (cljbang-org org-ql))])
+
+(defn- start!
+  "Load the pod, install the packages, and hand back its `eval-clj'.
+
+  Once per process, behind a delay: starting Emacs and installing into
+  it is the whole cost of the backend, the first op pays it, and every
+  op after that is a round trip to an Emacs already holding the buffers
+  the earlier ops opened."
+  []
+  (if-let [bin (System/getenv "ORGSTAR_POD")]
+    (pods/load-pod [bin])
+    (apply pods/load-pod pod-coords))
+  (require 'pod.kpassapk.emacs)
+  (run! (resolve 'pod.kpassapk.emacs/use-package!) packages)
+  (resolve 'pod.kpassapk.emacs/eval-clj))
+
+(defonce ^:private emacs (delay (start!)))
+
+(defn- eval-clj
+  "Run CODE, a string of cljbang Clojure, in the pod's Emacs; its value.
+
+  The last form's value comes back as EDN, already read, so the shapes
+  here are the ones cljbang-org returned.  An error inside Emacs arrives
+  as an `ex-info' and is rethrown carrying the program that caused it:
+  the program is generated, and generated code is what a caller cannot
+  see from the stack trace."
   [code]
-  (let [f (fs/create-temp-file {:prefix "orgstar" :suffix ".clj"})]
-    (try
-      (spit (fs/file f) code)
-      (let [args (cond-> ["emacsclient"]
-                   *socket* (conj "-s" *socket*)
-                   :always  (conj "--eval" (str "(cljbang-load-file " (pr-str (str f)) ")")))
-            {:keys [out err exit]} (apply p/shell {:out :string :err :string :continue true} args)
-            out (str/trim out)]
-        (when (or (not (zero? exit)) (str/starts-with? out "*ERROR*"))
-          (throw (ex-info (str "orgstar: emacs: " (if (str/blank? out) (str/trim err) out))
-                          {:exit exit :code code})))
-        (when (str/starts-with? out "\"")
-          (edn/read-string (edn/read-string out))))
-      (finally (fs/delete-if-exists f)))))
+  (try
+    (@emacs code)
+    (catch clojure.lang.ExceptionInfo e
+      (throw (ex-info (str "orgstar: emacs: " (ex-message e))
+                      (assoc (ex-data e) :code code)
+                      e)))))
 
 (defn available?
-  "True when there is an Emacs server answering with cljbang-org loaded."
+  "True when the pod starts and its Emacs has the packages loaded."
   []
-  (let [{:keys [out exit]}
-        (p/shell {:out :string :err :string :continue true}
-                 "emacsclient" "--eval"
-                 "(and (fboundp 'cljbang-load-file) (featurep 'cljbang-org) t)")]
-    (and (zero? exit) (= "t" (str/trim out)))))
+  (try
+    (boolean @emacs)
+    (catch Exception _ false)))
 
 ;;; Ops to cljbang forms
 
@@ -176,6 +195,6 @@
   [ops]
   (when (seq ops)
     (let [code (str "(require '[cljbang.org :as org] '[cljbang.org.ql :as ql])\n"
-                    "(pr-str " (pr-str (mapv form ops)) ")\n")
-          results (emacsclient code)]
+                    (pr-str (mapv form ops)) "\n")
+          results (eval-clj code)]
       (mapv decode ops results))))

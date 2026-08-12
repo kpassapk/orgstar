@@ -1,8 +1,8 @@
 # orgstar (org-*)
 
-universal org-mode.
+universal [Emacs] org-mode.
 
-Many targets, many backends.
+Many targets, many backends:
 
 Targets
 - clojure / babashka
@@ -10,13 +10,13 @@ Targets
 - Python (planned)
 
 Backends
-- emacsclient
-- emacs pod (planned)
+- pod
+- native
 
 Like [yamlstar][], the aim is to have a single shared library and 
 bindings for whatever language wants org. 
 
-Yaml is huge, org mode is huger. Nobody knows org like emacs. So emacs 
+Nobody knows org like emacs - so emacs 
 itself is one of many selectable and delectable backends.
 
 Status: alpha, v0. One backend (`:emacs`), a handful of ops.
@@ -26,15 +26,21 @@ Status: alpha, v0. One backend (`:emacs`), a handful of ops.
 
 ## Backends
 
-### Emacsclient backend
+### Pod backend
 
-Requires an Emacs server with [cljbang][] and [cljbang-org][] loaded:
+The default and, in v0, the only one. [pod-kpassapk-emacs][] drives a
+batch Emacs of its own, so what you need is an `emacs` binary — no
+server to start, no init file to load. On the first op the pod installs
+[cljbang-org][] and [org-ql][] into that Emacs with `use-package!`, and
+every op after that is a round trip to an Emacs already holding the
+buffers the earlier ops opened.
 
-```
-emacsclient --eval "(and (fboundp 'cljbang-load-filen) (featurep 'cljbang-org) t)"  ;=> t
-```
+The Emacs belongs to the process, which is why `save!` is its own op and
+belongs in the same `run!` as the edits it persists: a buffer left
+modified is gone when the process exits.
 
-[cljbang]: https://github.com/borkdude/cljbang.el
+Set `ORGSTAR_POD` to a pod binary to run against a local build instead
+of the released one.
 
 ## Queries
 
@@ -128,13 +134,11 @@ reads badly as JSON here will read badly there.
 
 ## Backends
 
-`orgstar.core/*backend*` picks who answers. `:emacs` is the only one.
+`orgstar.core/*backend*` picks who answers. `:emacs` — org read and
+written by Emacs itself, over the pod — is the only one.
 
-Two more are wanted:
+One more is wanted:
 
-- **pod** — [pod-kpassapk-emacs][] drives a batch Emacs of its own,
-  installing cljbang-org with `use-package!`. No live Emacs needed, no
-  edits in the user's session.
 - **native** — a Clojure parser, no Emacs at all, compiled (Glojure or
   let-go) into the shared library the bindings load. 
 
@@ -147,5 +151,6 @@ bb test
 ```
 
 They run against a real Emacs, because a real Emacs is the backend.
-Writes go to a copy in a temp directory and kill the buffer afterwards.
-With no Emacs server answering, the run says so and passes.
+Writes go to a copy in a temp directory. With no Emacs to be found, the
+run says so and passes.
+
