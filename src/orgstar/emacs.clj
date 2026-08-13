@@ -81,6 +81,12 @@
     (boolean @emacs)
     (catch Exception _ false)))
 
+(defn upgrade-packages []
+  (let [code
+        "(el! (let ((package (alist-get 'cljbang-org package-alist)))
+          (package-vc-upgrade (car package))))"]
+    (eval-clj code)))
+
 ;;; Ops to cljbang forms
 
 (defn- kw-name
@@ -109,6 +115,9 @@
 
 (defmethod form :headings [[_ file opts]]
   (files-form file (fn [f] (if opts (list 'org/headings f opts) (list 'org/headings f)))))
+
+(defmethod form :src-blocks [[_ file opts]]
+  (files-form file (fn [f] (if opts (list 'org/src-blocks f opts) (list 'org/src-blocks f)))))
 
 (defmethod form :select [[_ file query opts]]
   (files-form file (fn [f] (if opts
@@ -198,3 +207,7 @@
                     (pr-str (mapv form ops)) "\n")
           results (eval-clj code)]
       (mapv decode ops results))))
+
+(comment
+  (upgrade-packages)
+  )

@@ -1,10 +1,17 @@
 {:paths ["src" "test"]
+ :deps {kpassapk/orgstar {:local/root "."}}
  :tasks
- {orgstar {:doc  "orgstar CLI: keywords, headings, select"
-           :requires ([orgstar.cli :as cli])
-           :task (apply cli/-main *command-line-args*)}
-
-  test {:doc  "Run the tests (needs an emacs binary; the pod does the rest)"
+ {test {:doc  "Run the tests (needs an emacs binary; the pod does the rest)"
         :requires ([clojure.test :as t] [orgstar.core-test])
         :task (let [{:keys [fail error]} (t/run-tests 'orgstar.core-test)]
-                (System/exit (if (pos? (+ fail error)) 1 0)))}}}
+               (System/exit (if (pos? (+ fail error)) 1 0)))}
+
+  build {:doc "Build dist/orgstar"
+         :requires ([babashka.fs :as fs])
+         :task (let [out "dist/orgstar"]
+                (fs/create-dirs "dist")
+                (fs/delete-if-exists out)
+                (shell "bb" "-f" "src/orgstar/cli.clj" "uberscript" out)
+                (spit out (str "#!/usr/bin/env bb\n\n" (slurp out)))
+                (fs/set-posix-file-permissions out "rwxr-xr-x")
+                (println "wrote" out))}}}

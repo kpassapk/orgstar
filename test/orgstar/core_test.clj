@@ -8,6 +8,7 @@
   the file."
   (:require
    [babashka.fs :as fs]
+   [clojure.string :as str]
    [clojure.test :refer [deftest is testing use-fixtures]]
    [orgstar.core :as org]
    [orgstar.emacs :as emacs]))
@@ -53,6 +54,38 @@
       (is (= ["Quadlets" "Networking" "Firewall"] (mapv :title hs)))
       (is (= [1 1 2] (mapv :level hs)))
       (is (= "quadlets" (get-in (vec hs) [0 :properties :CUSTOM_ID]))))))
+
+(deftest headings-line-range-test
+  (when (emacs/available?)
+    (let [hs (org/headings sample)]
+      (testing "the span is the subtree's, in lines, inclusive at both ends"
+        (is (= [["Quadlets" 6 18] ["Networking" 19 20] ["Firewall" 20 20]]
+               (mapv (juxt :title :line-start :line-end) hs))))
+      (testing "the lines are what a caller reads the section back with"
+        (let [lines (vec (str/split-lines (slurp sample)))
+              {:keys [line-start line-end]} (first hs)]
+          (is (= "* TODO Quadlets" (nth lines (dec line-start))))
+          (is (= "" (nth lines (dec line-end))))
+          (is (some #(str/includes? % "Rootless containers")
+                    (subvec lines (dec line-start) line-end))))))))
+
+(deftest src-blocks-test
+  (when (emacs/available?)
+    (let [[b :as bs] (org/src-blocks sample)]
+      (is (= 1 (count bs)))
+      (testing "the block is data: its language, its name and its code"
+        (is (= "sh" (:language b)))
+        (is (= "not-a-keyword" (:name b)))
+        (is (= "echo hi" (:body b))))
+      (testing "the span frames the block, from #+begin_src to #+end_src"
+        (is (= [15 17] [(:line-start b) (:line-end b)])))
+      (testing ":headers carries the resolved header args"
+        (is (= "no" (get-in b [:headers :tangle] "no")))))))
+
+(deftest src-blocks-under-test
+  (when (emacs/available?)
+    (is (= 1 (count (org/src-blocks sample {:under "Quadlets"}))))
+    (is (= [] (vec (org/src-blocks sample {:under "Networking"}))))))
 
 (deftest write-test
   (when (emacs/available?)
