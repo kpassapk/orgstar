@@ -9,10 +9,6 @@ Targets
 - CLI
 - Python (planned)
 
-Backends
-- pod
-- native
-
 Like [yamlstar][], the aim is to have a single shared library and 
 bindings for whatever language wants org. 
 
@@ -28,16 +24,11 @@ Status: alpha, v0. One backend (`:emacs`), a handful of ops.
 
 ### Pod backend
 
-The default and, in v0, the only one. [pod-kpassapk-emacs][] drives a
-batch Emacs of its own, so what you need is an `emacs` binary — no
-server to start, no init file to load. On the first op the pod installs
-[cljbang-org][] and [org-ql][] into that Emacs with `use-package!`, and
-every op after that is a round trip to an Emacs already holding the
-buffers the earlier ops opened.
+The pod backend uses [pod-kpassapk-emacs][] to drive an
+Emacs instance. On the first op the pod installs
+[cljbang-org][] and [org-ql][] into that Emacs with `use-package!`.
 
-The Emacs belongs to the process, which is why `save!` is its own op and
-belongs in the same `run!` as the edits it persists: a buffer left
-modified is gone when the process exits.
+[pod-kpassapk-emacs]: https://github.com/kpassapk/pod-kpassapk-emacs
 
 Set `ORGSTAR_POD` to a pod binary to run against a local build instead
 of the released one.
@@ -55,11 +46,6 @@ of the released one.
 (org/select "server.org" '(and (level 1) (todo "TODO")))
 ;=> [{:title "Quadlets" :level 1 :todo "TODO" :tags #{} :properties {:CUSTOM_ID "quadlets"} ...}]
 ```
-
-Keys are downcased. A keyword the file writes once is a string, one it
-writes twice is a vector in file order. A `#+name:` or `#+caption:`
-looks the same and is not a file keyword: it belongs to the block or
-table below it, and is read there.
 
 Pass a collection of files and the answer is a map from file to result,
 read in a single round trip:
@@ -93,9 +79,6 @@ map a query returned.
 
 A **query** describes headings you are looking for, and is an
 [org-ql][] sexp passed to `select`. 
-
-The two meet in the heading map:
-`select` returns one, and every setter takes it as a selector.
 
 [org-ql]: https://github.com/alphapapa/org-ql
 
@@ -132,17 +115,6 @@ reads badly as JSON here will read badly there.
 
 `file` may be a collection for the three queries.
 
-## Backends
-
-`orgstar.core/*backend*` picks who answers. `:emacs` — org read and
-written by Emacs itself, over the pod — is the only one.
-
-One more is wanted:
-
-- **native** — a Clojure parser, no Emacs at all, compiled (Glojure or
-  let-go) into the shared library the bindings load. 
-
-[pod-kpassapk-emacs]: https://github.com/kpassapk/pod-kpassapk-emacs
 
 ## Tests
 
