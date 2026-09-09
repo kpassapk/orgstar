@@ -108,3 +108,61 @@
           (is (= ["a" "b" "c"] (:target (org/keywords file)))))
         (finally
           (fs/delete-tree dir))))))
+
+(def runbook (str (fs/absolutize "test/fixtures/runbook.org")))
+
+(deftest runnables-test
+  (when (emacs/available?)
+    (testing "src blocks and call lines share one index"
+      (is (= [["check" :src 0] ["fail" :src 1] [nil :call 2]]
+             (->> (concat (org/src-blocks runbook) (org/call-blocks runbook))
+                  (sort-by :index)
+                  (mapv (juxt :name :type :index))))))))
+
+(deftest drawers-test
+  (when (emacs/available?)
+    (let [[d :as ds] (org/drawers runbook)]
+      (is (= 1 (count ds)))
+      (is (= "OPERATOR" (:name d)))
+      (is (= "Continue if the instance is the right one." (:body d)))
+      (testing "the drawer's heading is the one whose span holds it"
+        (is (= "Check"
+               (->> (org/headings runbook)
+                    (filter #(<= (:begin %) (:begin d) (:end %)))
+                    last :title)))))))
+
+(deftest examples-test
+  (when (emacs/available?)
+    (is (= [["input-instance" "aly-andina" "Instance to deploy" :fixed-width]]
+           (mapv (juxt :name :value :caption :type) (org/examples runbook))))))
+
+(deftest execute-test
+  (when (emacs/available?)
+    (let [dir  (fs/create-temp-dir {:prefix "orgstar-test"})
+          file (str (fs/path dir "runbook.org"))]
+      (try
+        (fs/copy runbook file)
+        (testing "a clean block: value, exit 0"
+          (is (= {:value "checking aly-andina\n" :exit 0
+                  :stdout "checking aly-andina\n" :stderr nil}
+                 (org/execute! file "check"))))
+        (testing "an input replaces what the file names, without editing it"
+          (is (= "checking aly-norte\n"
+                 (:value (org/execute! file "check" {:inputs {"input-instance" "aly-norte"}}))))
+          (is (= "checking aly-norte\n"
+                 (:value (org/execute! file {:index 2} {:inputs {"input-instance" "aly-norte"}})))))
+        (testing "a failing block is a result, not a throw"
+          (is (= {:exit 3 :stdout "partial\n" :stderr "oops\n"}
+                 (select-keys (org/execute! file "fail") [:exit :stdout :stderr]))))
+        (testing "a block that cannot run throws"
+          (is (thrown? Exception (org/execute! file "no-such-block"))))
+        (testing "results were in the buffer; revert! leaves the file as it was"
+          (org/revert! file)
+          (is (= (slurp runbook) (slurp file))))
+        (finally
+          (fs/delete-tree dir))))))
+
+(deftest configure-after-start-test
+  (when (emacs/available?)
+    (is (thrown-with-msg? Exception #"configure! after"
+                          (emacs/configure! {:packages ['ob-shell]})))))

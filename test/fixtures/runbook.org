@@ -1,0 +1,36 @@
+#+TITLE: Runbook
+#+PROPERTY: header-args:sh :results output
+
+* Inputs
+
+#+name: input-instance
+#+caption: Instance to deploy
+: aly-andina
+
+* Check
+:PROPERTIES:
+:STEP:     1
+:END:
+
+#+name: check
+#+begin_src sh :var INSTANCE=input-instance
+echo "checking $INSTANCE"
+#+end_src
+
+:OPERATOR:
+Continue if the instance is the right one.
+:END:
+
+* Fail
+:PROPERTIES:
+:STEP:     2
+:END:
+
+#+name: fail
+#+begin_src sh
+echo partial
+echo oops >&2
+exit 3
+#+end_src
+
+#+call: check(INSTANCE=input-instance)

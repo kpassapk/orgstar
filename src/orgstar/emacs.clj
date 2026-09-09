@@ -30,16 +30,53 @@
   "The released pod to load, unless $ORGSTAR_POD names a binary."
   ['kpassapk/emacs "0.4.0"])
 
-(def ^:private packages
+(def cljbang-org-rev
+  "The cljbang-org commit the ops here are written against."
+  "3acdc912797246fe3917e0ddf56d542b751f1ed4")
+
+(defn- cljbang-org-package
+  "The cljbang-org declaration: the pinned release from git, unless
+  $ORGSTAR_CLJBANG_ORG names a checkout, which is how the package is
+  developed against this backend."
+  []
+  (if-let [dir (System/getenv "ORGSTAR_CLJBANG_ORG")]
+    (list 'cljbang-org :load-path dir)
+    (list 'cljbang-org :vc (list :url "https://github.com/kpassapk/cljbang-org"
+                                 :rev cljbang-org-rev))))
+
+(defn- default-packages
   "The elisp the ops need, as `use-package' declarations, in load order.
 
   cljbang itself is not here: the pod vendors it, being what compiles
   the Clojure it is sent.  org-ql is a package of its own and only
   `:select' wants it, but it is installed with the rest rather than on
   first use, so that the cost of a backend is paid in one place."
-  ['(cljbang-org :vc (:url "https://github.com/kpassapk/cljbang-org"))
+  []
+  [(cljbang-org-package)
    '(org-ql :ensure t)
    '(cljbang-org-ql :after (cljbang-org org-ql))])
+
+(defonce ^:private config
+  (atom {:packages nil}))
+
+(declare ^:private emacs)
+
+(defn configure!
+  "Set what the backend installs into its Emacs before the first op.
+
+  OPTS: {:packages [decl ...]} adds `use-package' declarations after
+  the ones the ops need -- the babel backends a runbook's blocks want,
+  a package that advises babel, a library of babel.  A caller that
+  runs blocks declares them here rather than owning a second Emacs.
+
+  Once, and before any op: the Emacs is started by the first op with
+  whatever is configured then, and a declaration added later would
+  never be installed."
+  [{:keys [packages]}]
+  (when (realized? emacs)
+    (throw (ex-info "orgstar: configure! after the backend started" {})))
+  (swap! config assoc :packages (vec packages))
+  nil)
 
 (defn- start!
   "Load the pod, install the packages, and hand back its `eval-clj'.
@@ -53,7 +90,8 @@
     (pods/load-pod [bin])
     (apply pods/load-pod pod-coords))
   (require 'pod.kpassapk.emacs)
-  (run! (resolve 'pod.kpassapk.emacs/use-package!) packages)
+  (run! (resolve 'pod.kpassapk.emacs/use-package!)
+        (into (default-packages) (:packages @config)))
   (resolve 'pod.kpassapk.emacs/eval-clj))
 
 (defonce ^:private emacs (delay (start!)))
@@ -119,6 +157,15 @@
 (defmethod form :src-blocks [[_ file opts]]
   (files-form file (fn [f] (if opts (list 'org/src-blocks f opts) (list 'org/src-blocks f)))))
 
+(defmethod form :call-blocks [[_ file opts]]
+  (files-form file (fn [f] (if opts (list 'org/call-blocks f opts) (list 'org/call-blocks f)))))
+
+(defmethod form :drawers [[_ file opts]]
+  (files-form file (fn [f] (if opts (list 'org/drawers f opts) (list 'org/drawers f)))))
+
+(defmethod form :examples [[_ file opts]]
+  (files-form file (fn [f] (if opts (list 'org/examples f opts) (list 'org/examples f)))))
+
 (defmethod form :select [[_ file query opts]]
   (files-form file (fn [f] (if opts
                              (list 'ql/select f (list 'quote query) opts)
@@ -141,6 +188,11 @@
 
 (defmethod form :deadline! [[_ file selector time]]
   (list 'org/deadline! (str file) selector time))
+
+(defmethod form :execute! [[_ file selector opts]]
+  (if opts
+    (list 'org/execute! (str file) selector opts)
+    (list 'org/execute! (str file) selector)))
 
 (defmethod form :save! [[_ file]]
   (list 'org/save! (str file)))
