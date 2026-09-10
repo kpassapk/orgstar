@@ -32,7 +32,7 @@
 
 (def cljbang-org-rev
   "The cljbang-org commit the ops here are written against."
-  "a048802e3895acaf347984a31f26f9ba3807a2ff")
+  "d1dd6e6a05a18a2e00396fb6b3130c4ca7b78c5e")
 
 (defn- cljbang-org-package
   "The cljbang-org declaration: the pinned release from git, unless
