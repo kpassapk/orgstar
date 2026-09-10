@@ -104,16 +104,42 @@ reads badly as JSON here will read badly there.
 | `keywords` | `[:keywords file]` | the `#+KEYWORD:` lines, downcased |
 | `headings` | `[:headings file opts]` | every heading as a map |
 | `select` | `[:select file query opts]` | headings matching an org-ql sexp |
+| `src-blocks` | `[:src-blocks file opts]` | every src block as a map |
+| `call-blocks` | `[:call-blocks file opts]` | every `#+call:` line as a map |
+| `drawers` | `[:drawers file opts]` | every `:NAME:` … `:END:` drawer as a map |
+| `examples` | `[:examples file opts]` | fixed-width runs and example blocks as maps |
 | `set-todo!` | `[:set-todo! file sel state]` | set TODO state; the count |
 | `set-keyword!` | `[:set-keyword! file key value]` | write `#+KEY:` lines; the count |
 | `set-property!` | `[:set-property! file sel key value]` | set a property; the count |
 | `set-tags!` | `[:set-tags! file sel tags]` | set tags; the count |
 | `schedule!` | `[:schedule! file sel time]` | set SCHEDULED; the count |
 | `deadline!` | `[:deadline! file sel time]` | set DEADLINE; the count |
+| `execute!` | `[:execute! file sel opts]` | run a block; `{:value :exit :stdout :stderr}` |
 | `save!` | `[:save! file]` | write the buffer to disk |
 | `revert!` | `[:revert! file]` | throw the buffer's edits away |
 
-`file` may be a collection for the three queries.
+`file` may be a collection for the queries.
+
+### Running blocks
+
+`execute!` runs a src block or a `#+call:` line and answers with a map
+whatever the exit code: a block that exits non-zero is a result to
+decide about, not an error. `{:inputs {"input-instance" "aly-andina"}}`
+binds values for the references the run resolves — a `:var` naming an
+example or a block, a call line's arguments — in place of what the file
+names, and the file is never edited.
+
+The babel backends the blocks need, and anything that advises babel,
+are declared before the first op:
+
+```clojure
+(require '[orgstar.emacs :as emacs])
+(emacs/configure! {:packages ['ob-shell
+                              '(devops :vc (:url "https://github.com/kpassapk/devops.el"))]})
+```
+
+Set `ORGSTAR_CLJBANG_ORG` to a cljbang-org checkout to run against it
+instead of the pinned release.
 
 
 ## Tests

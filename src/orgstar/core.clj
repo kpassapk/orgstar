@@ -44,6 +44,27 @@
   ([file] (run1 [:src-blocks file]))
   ([file opts] (run1 [:src-blocks file opts])))
 
+(defn call-blocks
+  "Every `#+call:' line in FILE as a vector of call maps.
+
+  A call line runs a block named elsewhere, so `src-blocks' does not see
+  it.  The two share one :index, and the runnables of a file in order
+  are (sort-by :index (concat (src-blocks f) (call-blocks f)))."
+  ([file] (run1 [:call-blocks file]))
+  ([file opts] (run1 [:call-blocks file opts])))
+
+(defn drawers
+  "Every drawer in FILE as a vector of drawer maps: :name, :body and
+  the span.  Property drawers are a heading's :properties, not here."
+  ([file] (run1 [:drawers file]))
+  ([file opts] (run1 [:drawers file opts])))
+
+(defn examples
+  "Every fixed-width run and example block in FILE as a vector of maps:
+  :type, :name, :value, :caption and the span."
+  ([file] (run1 [:examples file]))
+  ([file opts] (run1 [:examples file opts])))
+
 (defn select
   "Headings in FILE matching QUERY, an org-ql sexp, as heading maps.
 
@@ -99,6 +120,25 @@
   TIME is anything `org-deadline' reads, or nil to remove the line."
   [file selector time]
   (run1 [:deadline! file selector time]))
+
+(defn execute!
+  "Run the block in FILE named by SELECTOR; a result map.
+
+  SELECTOR is a block name, a map with :name or :index, or nil for the
+  file's only runnable block.  The result is {:value :exit :stdout
+  :stderr} whatever the exit code: a block that exits non-zero is a
+  result, not an error.  It throws only when the block did not run.
+
+  OPTS: {:inputs {\"input-instance\" \"aly-andina\"}} binds values for
+  the references the run resolves, in place of what the file names,
+  without editing it.
+
+  Results land in the buffer; `save!' persists them, `revert!' throws
+  them away.  The babel backend the block needs, and anything that
+  advises babel, is declared with `orgstar.emacs/configure!' before the
+  first op."
+  ([file selector] (run1 [:execute! file selector]))
+  ([file selector opts] (run1 [:execute! file selector opts])))
 
 (defn save!
   "Save FILE's buffer if modified; the file name.  The only step that touches disk."
